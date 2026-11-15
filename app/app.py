@@ -2,20 +2,22 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import psutil
+import os
+import time
 
 app = Flask(__name__)
-
-# Enable frontend-backend communication
 CORS(app)
 
-# Prometheus request counter
 REQUEST_COUNT = Counter(
     "deployx_requests_total",
     "Total number of requests"
 )
 
+START_TIME = time.time()
+process = psutil.Process(os.getpid())
 
-# 1. Home route
+
 @app.route("/")
 def home():
     REQUEST_COUNT.inc()
@@ -26,16 +28,11 @@ def home():
     })
 
 
-# 2. Health check API
 @app.route("/health")
 def health():
-    return jsonify({
-        "project": "DeployX",
-        "status": "healthy"
-    }), 200
+    return jsonify({"status": "healthy"}), 200
 
 
-# 3. Dashboard statistics API
 @app.route("/api/stats")
 def stats():
     return jsonify({
@@ -45,26 +42,24 @@ def stats():
         "successful_deployments": 1,
         "failed_deployments": 0,
         "active_services": 1
-    }), 200
+    })
 
 
-# 4. Deployment history API
-@app.route("/api/deployments")
-def deployments():
+@app.route("/api/monitoring")
+def monitoring():
+    memory = process.memory_info()
+
     return jsonify({
-        "deployments": [
-            {
-                "id": "DEP-001",
-                "project": "DeployX Backend",
-                "branch": "main",
-                "status": "Success",
-                "environment": "Production"
-            }
-        ]
-    }), 200
+        "status": "healthy",
+        "cpu_percent": process.cpu_percent(interval=0.1),
+        "memory_mb": round(memory.rss / (1024 * 1024), 2),
+        "memory_percent": round(process.memory_percent(), 2),
+        "threads": process.num_threads(),
+        "uptime_seconds": round(time.time() - START_TIME, 2),
+        "open_files": process.num_fds() if hasattr(process, "num_fds") else None
+    })
 
 
-# 5. Prometheus metrics API
 @app.route("/metrics")
 def metrics():
     return generate_latest(), 200, {
@@ -72,10 +67,5 @@ def metrics():
     }
 
 
-# Run application
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=False
-    )
+    app.run(host="0.0.0.0", port=5000, debug=False)

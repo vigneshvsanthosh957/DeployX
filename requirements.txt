@@ -3,3 +3,4 @@ prometheus-client
 pytest
 gunicorn
 flask-cors
+psutil
